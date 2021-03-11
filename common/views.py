@@ -41,7 +41,7 @@ def save_the_data_in_elastic(request):
                     index_id = index_id + 1
                 try:
                     helpers.bulk(elastic, docs)
-                    
+                    IndexingHistory.objects.create(index_name=index_name, elastic_server_ip=es_ip, elastic_server_port=es_port)
                 except Exception as e:
                     JsonResponse({'result': False, 'msg': e})
 
