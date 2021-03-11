@@ -55,6 +55,8 @@
 </div>
 <script>
 
+    let objects_extracted_from_json = null;
+
     // json 파일만 입력 가능하게... 추후 csv 추가.
     function check_fileType() {
         const file_value = $("#file").val().split("\\")
@@ -157,10 +159,54 @@
             alert('json 파일만 입력가능합니다.');
             $("#file").val("");
             $('.custom-file-label').html('');
+            objects_extracted_from_json = null;
             return;
         } else {
             const file_full_name = $(this).val();
             $('.custom-file-label').html(file_full_name.replace('C:\\fakepath\\', ''));
+
+            const file = $("#file")[0].files[0];
+            const formData = new FormData();
+            formData.append("file", file);
+            $.ajax({
+                    url: "{% url 'common:detect_list_in_json' %}",
+                    type: "POST",
+                    processData: false,
+                    contentType: false,
+                    data: formData,
+                    beforeSend: function () {
+
+                    },
+                    success: function (data) {
+                        if (data.result === true) {
+                            objects_extracted_from_json = data.lists
+                            Toast.fire({
+                                icon: 'success',
+                                title: data.msg
+                            })
+                        } else {
+                            objects_extracted_from_json = null;
+                            Toast.fire({
+                                icon: 'error',
+                                title: data.msg
+                            })
+                        }
+                    }
+                }
+            );
+        }
+    })
+
+    const Toast = Swal.mixin({
+        toast: true,
+        position: 'bottom-end',
+        showConfirmButton: true,
+        timer: 3000,
+        padding: 20,
+        timerProgressBar: true,
+        didOpen: (toast) => {
+            toast.addEventListener('mouseenter', Swal.stopTimer)
+            toast.addEventListener('mouseleave', Swal.resumeTimer)
         }
     })
 </script>
