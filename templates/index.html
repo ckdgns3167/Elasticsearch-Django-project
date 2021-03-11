@@ -1,0 +1,126 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Elastic TEST</title>
+
+    <script src="{% static 'js/jquery-3.6.0.min.js' %}?ver={% now "U" %}"></script>
+
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css" integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js" integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6" crossorigin="anonymous"></script>
+
+    <script src="//cdn.jsdelivr.net/npm/sweetalert2@10"></script>
+
+    <link href="{% static 'css/my_css.css' %}?ver={% now "U" %}" rel="stylesheet" type="text/css"/>
+    <script src="{% static 'js/my_js.js' %}?ver={% now "U" %}"></script>
+</head>
+<body>
+<div>
+    <p class="m-0 text-center"><b id="page-title">Elasticsearch에 JSON 저장시키기</b></p>
+</div>
+<hr class="m-0">
+<div class="flex-container">
+    <div id="content">
+        <label><b>1. Select JSON file.</b></label>
+        <div class="input-group ml-4 mb-2 w-404px">
+            <div class="custom-file">
+                <input type="file" class="custom-file-input" id="file" accept=".json">
+                <label class="custom-file-label" for="file"></label>
+            </div>
+        </div>
+        <label><b>2. Enter a prefix for the index name.</b></label>
+        <div class="input-group ml-4 mb-2 w-404px">
+            <input type="text" class="form-control" id="index-prefix">
+        </div>
+        <div class="input-group ml-4 mb-2 w-404px mt-4 d-flex flex-row-reverse">
+            <button id="save-btn" type="button" class="btn btn-primary"><b>SAVE</b></button>
+        </div>
+    </div>
+</div>
+<script>
+
+    // json 파일만 입력 가능하게... 추후 csv 추가.
+    function check_fileType() {
+        const file_value = $("#file").val().split("\\")
+        const file_full_name = file_value[file_value.length - 1];
+        const fileFormat = file_full_name.split(".");
+        if (fileFormat.indexOf("json") > -1) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    $('#save-btn').on('click', () => {
+        const file_name = $('#file').val().replace('C:\\fakepath\\', '');
+        const index_prefix = $('#index-prefix').val();
+
+        // 예외처리
+        if (file_name.trim() === '') {
+            alert('파일을 첨부하세요.');
+            return;
+        } else if (index_prefix.trim() === '') {
+            alert('Index의 prefix를 입력하세요.');
+            return;
+        } else {
+            const file = $("#file")[0].files[0];
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("index_prefix", index_prefix);
+            $.ajax({
+                    url: "{% url 'common:save_the_data_in_elastic' %}",
+                    type: "POST",
+                    processData: false,
+                    contentType: false,
+                    data: formData,
+                    beforeSend: function () {
+                        Swal.fire({
+                            html: '<b>엘라스틱에 데이터 저장 중</b>',
+                            allowOutsideClick: false,
+                            showConfirmButton: false,
+                            width: 350,
+                            onBeforeOpen: () => {
+                                Swal.showLoading();
+                            },
+                        });
+                    },
+                    success: function (data) {
+                        if (data.result === true) {
+                            Swal.fire({
+                                title: '저장 성공',
+                                icon: 'success',
+                                allowOutsideClick: true,
+                                showConfirmButton: true,
+                                width: 350,
+                            });
+                        } else {
+                            Swal.fire({
+                                title: '저장 실패',
+                                html: data.msg,
+                                icon: 'error',
+                                allowOutsideClick: true,
+                                showConfirmButton: true,
+                                width: 350,
+                            });
+                        }
+                    }
+                }
+            );
+        }
+    })
+
+    $('#file').on('change', function () {
+        if (!check_fileType()) {
+            alert('json 파일만 입력가능합니다.');
+            $("#file").val("");
+            $('.custom-file-label').html('');
+            return;
+        } else {
+            const file_full_name = $(this).val();
+            $('.custom-file-label').html(file_full_name.replace('C:\\fakepath\\', ''));
+        }
+    })
+</script>
+</body>
+</html>
