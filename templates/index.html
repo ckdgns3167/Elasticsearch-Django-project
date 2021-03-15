@@ -49,7 +49,7 @@
             <input type="text" class="form-control" id="index-prefix">
         </div>
         <div class="input-group ml-4 mb-2 w-404px p-8px pt-0 mt-4 d-flex flex-row-reverse">
-            <button id="save-btn" type="button" class="btn btn-primary" style="width: 75.83px;" disabled><b>SAVE</b></button>
+            <button id="save-btn" type="button" class="btn btn-secondary" style="width: 75.83px;" disabled><b>SAVE</b></button>
         </div>
     </div>
 </div>
@@ -174,8 +174,12 @@
         const step_3 = $('#third-step-div').hasClass('status-success');
 
         if (step_1 && step_2 && step_3) {
+            $('#save-btn').removeClass('btn-secondary');
+            $('#save-btn').addClass('btn-primary');
             $('#save-btn').attr('disabled', false);
         } else {
+            $('#save-btn').removeClass('btn-primary');
+            $('#save-btn').addClass('btn-secondary');
             $('#save-btn').attr('disabled', true);
         }
     }
