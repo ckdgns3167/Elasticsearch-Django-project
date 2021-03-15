@@ -15,6 +15,10 @@ html, body {
     width: 404px;
 }
 
+.p-8px {
+    padding: 8px;
+}
+
 #page-title {
     font-size: 6vw;
     max-font-size: 3vw;
@@ -43,4 +47,27 @@ html, body {
     -moz-box-pack: center;
     -ms-flex-pack: center;
     justify-content: center; /* 수평 정렬 */
+}
+
+#save-btn[disabled] {
+  cursor: not-allowed;
+}
+
+.status-checking {
+    border: 2px solid #f9ca24 !important;
+    border-radius: .25rem;
+}
+
+.status-fail {
+    border: 2px solid #ff7979 !important;
+    border-radius: .25rem;
+}
+
+.status-success {
+    border: 2px solid #badc58 !important;
+    border-radius: .25rem;
+}
+
+#first-step-div, #second-step-div, #third-step-div {
+    border: 2px solid transparent;
 }
