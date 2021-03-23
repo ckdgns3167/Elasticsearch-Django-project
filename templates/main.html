@@ -1,0 +1,442 @@
+{% extends "base.html" %}
+{% load static %}
+{% block content %}
+<div>
+    <p class="m-0 text-center"><b id="page-title"><span style="color: #e67e22;">Elasticsearch</span>에 <span style="color: #2ecc71; ">JSON</span> 저장시키기</b></p>
+</div>
+<hr class="m-0">
+<div class="flex-container">
+    <div id="content">
+        <label><b>1. Enter the IP address and port of Elasticsearch.</b></label>
+        <div id="first-step-div" class="input-group ml-4 mb-2 w-404px p-8px">
+            <div class="row ml-0 mr-0 w-100">
+                <div style="width: 303px;">
+                    <input type="text" class="form-control" id="es-ip" placeholder="127.0.0.1"
+                           minlength="7" maxlength="15" size="15"
+                           oninput="this.value = this.value.replace(/[^0-9,.]/g, '');">
+                </div>
+                <div style="width: 75.83px; margin-left: 5px;">
+                    <input type="text" class="form-control" id="es-port" placeholder="9200"
+                           maxlength="5"
+                           oninput="this.value = this.value.replace(/[^0-9]/g, '');">
+                </div>
+            </div>
+        </div>
+        <label><b>2. Select JSON file.</b></label>
+        <div id="second-step-div" class="input-group ml-4 mb-2 w-404px p-8px">
+            <div class="custom-file">
+                <input type="file" class="custom-file-input" id="file" accept=".json">
+                <label class="custom-file-label" for="file"></label>
+            </div>
+        </div>
+        <label><b>3. Enter a prefix for the index name.</b></label>
+        <div id="third-step-div" class="input-group ml-4 mb-2 w-404px p-8px ">
+            <input type="text" class="form-control" id="index-prefix">
+        </div>
+        <div class="input-group ml-4 mb-2 w-404px p-8px pt-0 mt-4 d-flex flex-row-reverse">
+            <button id="save-btn" type="button" class="btn btn-secondary" style="width: 75.83px;" disabled><b>SAVE</b></button>
+        </div>
+    </div>
+</div>
+<script>
+    const DEFAULT_IP = '127.0.0.1';
+    const DEFAULT_PORT = '9200';
+
+    let prev_ip = null;
+    let prev_port = null;
+
+    let objects_extracted_from_json = null;
+
+    $(document).ready(function () {
+        const es_ip = DEFAULT_IP;
+        const es_port = DEFAULT_PORT;
+        $.ajax({
+                url: "{% url 'common:check_elasticsearch_connection' %}",
+                type: "POST",
+                data: {es_ip, es_port},
+                beforeSend: function () {
+                    $('#first-step-div').addClass('status-checking');
+                },
+                success: function (data) {
+                    prev_ip = es_ip;
+                    prev_port = es_port;
+                    if (data.result === true) {
+                        $('#first-step-div').removeClass('status-checking');
+                        $('#first-step-div').addClass('status-success');
+                        Toast.fire({
+                            icon: 'success',
+                            title: '엘라스틱서치 연결 가능'
+                        });
+                    } else {
+                        $('#first-step-div').removeClass('status-checking');
+                        $('#first-step-div').addClass('status-fail');
+                        Toast.fire({
+                            icon: 'error',
+                            title: '엘라스틱서치 연결 불가능'
+                        });
+                    }
+                    saveBtn_activator();
+                }
+            }
+        );
+    });
+
+    $('#es-ip, #es-port').focusin(() => {
+        $('#first-step-div').removeClass('status-fail');
+        $('#first-step-div').removeClass('status-success');
+        $('#first-step-div').addClass('status-checking');
+        prev_ip = null;
+        prev_port = null;
+    });
+
+    $('html').click((e) => {
+        if ($(e.target)[0].id !== 'es-ip' && $(e.target)[0].id !== 'es-port') {
+            let es_ip = $('#es-ip').val();
+            let es_port = $('#es-port').val();
+
+            if (es_ip === '') {
+                es_ip = '127.0.0.1';
+            } else {
+                if (!ValidateIPaddress(es_ip)) {
+                    $('#first-step-div').removeClass('status-success');
+                    $('#first-step-div').removeClass('status-checking');
+                    $('#first-step-div').addClass('status-fail');
+                    Toast.fire({
+                        icon: 'error',
+                        title: 'IP 주소 형식을 지켜서 입력해주세요.'
+                    });
+                    prev_ip = es_ip
+                    saveBtn_activator();
+                    return;
+                }
+            }
+
+            if (es_port === '') {
+                es_port = '9200';
+            }
+
+            if (es_ip !== prev_ip || es_port !== prev_port) {
+                $.ajax({
+                        url: "{% url 'common:check_elasticsearch_connection' %}",
+                        type: "POST",
+                        data: {es_ip, es_port},
+                        beforeSend: function () {
+                            $('#first-step-div').removeClass('status-fail');
+                            $('#first-step-div').removeClass('status-success');
+                            $('#first-step-div').addClass('status-checking');
+                        },
+                        success: function (data) {
+                            if (data.result === true) {
+                                $('#first-step-div').removeClass('status-checking');
+                                $('#first-step-div').addClass('status-success');
+                                Toast.fire({
+                                    icon: 'success',
+                                    title: '엘라스틱서치 연결 가능'
+                                });
+
+
+                            } else {
+                                $('#first-step-div').removeClass('status-checking');
+                                $('#first-step-div').addClass('status-fail');
+                                Toast.fire({
+                                    icon: 'error',
+                                    title: '엘라스틱서치 연결 불가능'
+                                });
+                            }
+                            saveBtn_activator();
+                        }
+                    }
+                );
+            }
+            prev_ip = es_ip
+            prev_port = es_port;
+        }
+    })
+
+    function saveBtn_activator() {
+        const step_1 = $('#first-step-div').hasClass('status-success');
+        const step_2 = $('#second-step-div').hasClass('status-success');
+        const step_3 = $('#third-step-div').hasClass('status-success');
+
+        if (step_1 && step_2 && step_3) {
+            $('#save-btn').removeClass('btn-secondary');
+            $('#save-btn').addClass('btn-primary');
+            $('#save-btn').attr('disabled', false);
+        } else {
+            $('#save-btn').removeClass('btn-primary');
+            $('#save-btn').addClass('btn-secondary');
+            $('#save-btn').attr('disabled', true);
+        }
+    }
+
+    // json 파일만 입력 가능하게... 추후 csv 추가.
+    function check_fileType() {
+        const file_value = $("#file").val().split("\\")
+        const file_full_name = file_value[file_value.length - 1];
+        const fileFormat = file_full_name.split(".");
+        if (fileFormat.indexOf("json") > -1) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    // IP 입력란에 입력한 텍스트가 IP 형식인지 검사.
+    function ValidateIPaddress(inputText) {
+        var ipformat = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
+        if (ipformat.test(inputText)) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    $('#save-btn').on('click', () => {
+        let es_ip = $('#es-ip').val();
+        let es_port = $('#es-port').val();
+        const file_name = $('#file').val().replace('C:\\fakepath\\', '');
+        const index_prefix = $('#index-prefix').val();
+
+        // 예외처리
+        if (es_ip === '') {
+            es_ip = '127.0.0.1';
+        } else {
+            if (!ValidateIPaddress(es_ip)) {
+                alert('IP 주소 형식을 지켜서 입력해주세요.');
+                return;
+            }
+        }
+
+        if (es_port === '') {
+            es_port = '9200';
+        }
+        if (file_name.trim() === '') {
+            alert('파일을 첨부하세요.');
+            return;
+        } else if (index_prefix.trim() === '') {
+            alert('Index의 prefix를 입력하세요.');
+            return;
+        } else {
+            $.ajax({
+                    url: "{% url 'common:check_index_name_in_elastic' %}",
+                    type: "POST",
+                    data: {es_ip, es_port, index_prefix, objects_extracted_from_json},
+                    beforeSend: function () {
+                        Swal.fire({
+                            html: '<b>인덱스 중복 검사 중</b>',
+                            allowOutsideClick: false,
+                            showConfirmButton: false,
+                            width: 350,
+                            onBeforeOpen: () => {
+                                Swal.showLoading();
+                            },
+                        });
+                    },
+                    success: function (data) {
+                        if (data.connection === true) {
+                            if (data.already_exists === true) {
+                                // 이미 같은 이름의 인덱스가 있음.
+                                // 덮어써서 그대로 만들지 물어보고 진행한다.
+                                Swal.fire({
+                                    title: '인덱스 이름 중복',
+                                    html: "이미 엘라스틱서치에 저장된 인덱스 중에<br>같은 이름의 인덱스가 있습니다.<br><br>그대로 진행하시겠습니까?",
+                                    icon: 'warning',
+                                    showCancelButton: true,
+                                    confirmButtonColor: '#3085d6',
+                                    cancelButtonColor: '#d33',
+                                    confirmButtonText: '확인',
+                                    cancelButtonText: '취소'
+                                }).then((result) => {
+                                    if (result.isConfirmed) {
+                                        const file = $("#file")[0].files[0];
+                                        const formData = new FormData();
+                                        formData.append("file", file);
+                                        formData.append("index_prefix", index_prefix);
+                                        formData.append("es_ip", es_ip);
+                                        formData.append("es_port", es_port);
+                                        $.ajax({
+                                                url: "{% url 'common:save_the_data_in_elastic' %}",
+                                                type: "POST",
+                                                processData: false,
+                                                contentType: false,
+                                                data: formData,
+                                                beforeSend: function () {
+                                                    Swal.fire({
+                                                        html: '<b>엘라스틱에 데이터 저장 중</b>',
+                                                        allowOutsideClick: false,
+                                                        showConfirmButton: false,
+                                                        width: 350,
+                                                        onBeforeOpen: () => {
+                                                            Swal.showLoading();
+                                                        },
+                                                    });
+                                                },
+                                                success: function (data) {
+                                                    if (data.result === true) {
+                                                        Swal.fire({
+                                                            title: '저장 성공',
+                                                            icon: 'success',
+                                                            allowOutsideClick: true,
+                                                            showConfirmButton: true,
+                                                            width: 350,
+                                                        });
+                                                    } else {
+                                                        Swal.fire({
+                                                            title: '저장 실패',
+                                                            html: data.msg,
+                                                            icon: 'error',
+                                                            allowOutsideClick: true,
+                                                            showConfirmButton: true,
+                                                            width: 350,
+                                                        });
+                                                    }
+                                                }
+                                            }
+                                        );
+                                    }
+                                })
+                            } else {
+                                // 같은 이름의 인덱스가 없음.
+                                // 그냥 진행
+                                const file = $("#file")[0].files[0];
+                                const formData = new FormData();
+                                formData.append("file", file);
+                                formData.append("index_prefix", index_prefix);
+                                formData.append("es_ip", es_ip);
+                                formData.append("es_port", es_port);
+                                $.ajax({
+                                        url: "{% url 'common:save_the_data_in_elastic' %}",
+                                        type: "POST",
+                                        processData: false,
+                                        contentType: false,
+                                        data: formData,
+                                        beforeSend: function () {
+                                            Swal.fire({
+                                                html: '<b>엘라스틱에 데이터 저장 중</b>',
+                                                allowOutsideClick: false,
+                                                showConfirmButton: false,
+                                                width: 350,
+                                                onBeforeOpen: () => {
+                                                    Swal.showLoading();
+                                                },
+                                            });
+                                        },
+                                        success: function (data) {
+                                            if (data.result === true) {
+                                                Swal.fire({
+                                                    title: '저장 성공',
+                                                    icon: 'success',
+                                                    allowOutsideClick: true,
+                                                    showConfirmButton: true,
+                                                    width: 350,
+                                                });
+                                            } else {
+                                                Swal.fire({
+                                                    title: '저장 실패',
+                                                    html: data.msg,
+                                                    icon: 'error',
+                                                    allowOutsideClick: true,
+                                                    showConfirmButton: true,
+                                                    width: 350,
+                                                });
+                                            }
+                                        }
+                                    }
+                                );
+                            }
+                        } else {
+                            Swal.fire({
+                                title: '저장 실패',
+                                html: '엘라스틱서치 연결 불가능',
+                                icon: 'error',
+                                allowOutsideClick: true,
+                                showConfirmButton: true,
+                                width: 350,
+                            });
+                        }
+                    }
+                }
+            );
+        }
+    })
+
+    $('#file').on('change', function () {
+        if (!check_fileType()) {
+            $('#second-step-div').removeClass('status-success');
+            $('#second-step-div').removeClass('status-checking');
+            $('#second-step-div').addClass('status-fail');
+            alert('json 파일만 입력가능합니다.');
+            $("#file").val("");
+            $('.custom-file-label').html('');
+            objects_extracted_from_json = null;
+            saveBtn_activator();
+            return;
+        } else {
+            const file_full_name = $(this).val();
+            $('.custom-file-label').html(file_full_name.replace('C:\\fakepath\\', ''));
+
+            const file = $("#file")[0].files[0];
+            const formData = new FormData();
+            formData.append("file", file);
+            $.ajax({
+                    url: "{% url 'common:detect_list_in_json' %}",
+                    type: "POST",
+                    processData: false,
+                    contentType: false,
+                    data: formData,
+                    beforeSend: function () {
+                        $('#second-step-div').removeClass('status-fail');
+                        $('#second-step-div').removeClass('status-success');
+                        $('#second-step-div').addClass('status-checking');
+                    },
+                    success: function (data) {
+                        if (data.result === true) {
+                            $('#index-prefix').focus();
+                            objects_extracted_from_json = data.lists
+                            $('#second-step-div').removeClass('status-checking');
+                            $('#second-step-div').addClass('status-success');
+                            Toast.fire({
+                                icon: 'success',
+                                title: data.msg
+                            })
+                        } else {
+                            objects_extracted_from_json = null;
+                            $('#second-step-div').removeClass('status-checking');
+                            $('#second-step-div').addClass('status-fail');
+                            Toast.fire({
+                                icon: 'error',
+                                title: data.msg
+                            })
+                        }
+                        saveBtn_activator();
+                    }
+                }
+            );
+        }
+    });
+
+    $("#index-prefix").keyup(function () {
+        if ($("#index-prefix").val() !== '') {
+            $("#third-step-div").removeClass('status-fail')
+            $("#third-step-div").addClass('status-success')
+        } else {
+            $("#third-step-div").addClass('status-fail')
+            $("#third-step-div").removeClass('status-success')
+        }
+        saveBtn_activator();
+    });
+
+    const Toast = Swal.mixin({
+        toast: true,
+        position: 'bottom-end',
+        showConfirmButton: true,
+        timer: 3000,
+        padding: 20,
+        timerProgressBar: true,
+        didOpen: (toast) => {
+            toast.addEventListener('mouseenter', Swal.stopTimer)
+            toast.addEventListener('mouseleave', Swal.resumeTimer)
+        }
+    })
+</script>
+{% endblock %}

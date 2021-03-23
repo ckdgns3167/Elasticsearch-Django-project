@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% load static %}
+{% block content %}
+    <div>
+        <div>
+            <p class="m-0 text-center"><b id="page-title">Draw <span style="color: #3498db;">charts</span> with elasticsearch <span style="color: #f1c40f;">index name</span>.</b></p>
+        </div>
+        <hr class="m-0">
+    </div>
+    <div class="flex-container">
+        <div style="margin: auto; width: 500px;">
+            <div style="padding: 48px;">
+                <label><b>1. Enter the index name.</b></label>
+                <input type="text" class="form-control w-100" id="input-index-name" autofocus>
+            </div>
+            <label style="margin-left: 48px;"><b>2. Look at the chart below.</b></label>
+            <div id="chart-area">
+                <i class="fad fa-chart-area fa-9x" style="color: #ecf0f1;"></i>
+            </div>
+        </div>
+    </div>
+    <script>
+
+        // 엘라스틱서치 서버 정보
+        const ES_IP = '192.168.1.44';
+        const ES_PORT = '9200';
+
+        // 차트 없을 때
+        const blank = `<i class="fad fa-chart-area fa-9x" style="color: #ecf0f1;"></i>`;
+
+        $('#input-index-name').keypress((e) => {
+            if (e.which === 13) {
+                const entered_index_name = $('#input-index-name').val();
+                $('#input-index-name').val('');
+                get_all_document_data_in_any_index(entered_index_name);
+            }
+        });
+
+        // 특정 인덱스의 모든 정보를 확인
+        const get_all_document_data_in_any_index = (index_name) => {
+            const queryFilter = {
+                size: get_total_document_count(index_name),
+                query: {"match_all": {}},
+            };
+            $.ajax({
+                    url: "http://" + ES_IP + ":" + ES_PORT + "/" + index_name + "/_search",
+                    type: 'POST',
+                    dataType: 'json',
+                    data: JSON.stringify(queryFilter),
+                    contentType: "application/json;charset=UTF-8",
+                    beforeSend: function () {
+                        // 데이터 불러올 때 loading 표시
+                    },
+                    success: function (data) {
+
+                        // 특정 index 에 포함되어 있는 document 들의 정보를 리스트로 받아옴.
+                        const doc_list = data.hits.hits;
+
+                        // document 들의 메타 정보 같은 것들은 제외하고 가장 필요한 _source 데이터만을 list 로 map() 으로 받아옴.
+                        const doc_source_list = doc_list.map((doc) => doc['_source']);
+                        console.log(doc_source_list)
+                        // 데이터 그리기
+                        $('#chart-area').empty();
+                        draw_chart(doc_source_list);
+                    },
+                }
+            );
+        };
+
+        // 특정 인덱스의 document 개수를 확인
+        const get_total_document_count = (index_name) => {
+            let count = null;
+            $.ajax({
+                    url: "http://" + ES_IP + ":" + ES_PORT + "/" + index_name + "/_count",
+                    type: 'POST',
+                    dataType: 'json',
+                    async: false,
+                    success: function (data) {
+                        count = data['count']
+                    },
+                }
+            );
+            return count
+        };
+
+        const draw_chart = (doc_source_list) => {
+            const _series = doc_source_list.map((v) => v.count);
+            const _labels = doc_source_list.map((v) => v.item);
+            const apexChart = "#chart-area";
+            const options = {
+                series: _series,
+                chart: {
+                    height: 350,
+                    type: 'pie'
+                },
+                title: {
+                    text: 'Stock Price Movement',
+                    align: 'center',
+                    margin: 20
+                },
+                labels: _labels
+            };
+
+            const chart = new ApexCharts(document.querySelector(apexChart), options);
+            chart.render();
+        };
+    </script>
+{% endblock %}

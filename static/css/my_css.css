@@ -20,8 +20,7 @@ html, body {
 }
 
 #page-title {
-    font-size: 6vw;
-    max-font-size: 3vw;
+    font-size: 3vw;
 }
 
 #content {
@@ -30,9 +29,35 @@ html, body {
     margin: auto;
 }
 
+#page-title {
+    font-size: 3vw;
+}
+
 .flex-container {
     width: 100%;
-    height: calc(100vh - 162px);
+    height: 90vh;
+    display: -webkit-box;
+    display: -moz-box;
+    display: -ms-flexbox;
+    display: flex;
+
+    -webkit-box-align: center;
+    -moz-box-align: center;
+    -ms-flex-align: center;
+    align-items: center; /* 수직 정렬 */
+
+    -webkit-box-pack: center;
+    -moz-box-pack: center;
+    -ms-flex-pack: center;
+    justify-content: center; /* 수평 정렬 */
+}
+
+#chart-area {
+    margin: auto;
+    width: 404px;
+    height: 404px;
+    border: 1px solid #ced4da;
+    border-radius: .25rem;
     display: -webkit-box;
     display: -moz-box;
     display: -ms-flexbox;

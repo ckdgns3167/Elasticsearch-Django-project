@@ -25,6 +25,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('common/', include('common.urls', namespace='common')),
 
-    path('', views.index, name='index'),
+    path('', views.main, name='main'),
+    path('draw_chart', views.draw_chart, name='draw_chart'),
 
 ]

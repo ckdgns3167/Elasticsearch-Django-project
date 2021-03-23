@@ -70,7 +70,7 @@ def save_the_data_in_elastic(request):
         for k, v in json_data.items():
             if str(type(v)) == "<class 'list'>":
 
-                index_name = index_prefix + '-' + k
+                index_name = 'raw-' + index_prefix + '-' + k
                 docs = []
 
                 index_id = 1
@@ -109,7 +109,7 @@ def check_index_name_in_elastic(request):
 
     if elastic.ping():
         for item in objects_extracted_from_json:
-            if elastic.indices.exists(index=index_prefix + '-' + item):
+            if elastic.indices.exists(index='raw-' + index_prefix + '-' + item):
                 return JsonResponse({'connection': True, 'already_exists': True})
             else:
                 return JsonResponse({'connection': True, 'already_exists': False})
