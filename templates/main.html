@@ -218,7 +218,7 @@
             return;
         } else {
             $.ajax({
-                    url: "{% url 'common:check_index_name_in_elastic' %}",
+                    url: "{% url 'common:check_elasticsearch_for_duplicate_index_names' %}",
                     type: "POST",
                     data: {es_ip, es_port, index_prefix, objects_extracted_from_json},
                     beforeSend: function () {

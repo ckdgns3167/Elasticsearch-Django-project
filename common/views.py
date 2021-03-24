@@ -94,7 +94,7 @@ def save_the_data_in_elastic(request):
 
 
 @csrf_exempt
-def check_index_name_in_elastic(request):
+def check_elasticsearch_for_duplicate_index_names(request):
     es_ip = request.POST.get('es_ip')
     es_port = request.POST.get('es_port')
     index_prefix = request.POST.get('index_prefix')
@@ -115,3 +115,18 @@ def check_index_name_in_elastic(request):
                 return JsonResponse({'connection': True, 'already_exists': False})
     else:
         return JsonResponse({'connection': False})
+
+
+@csrf_exempt
+def check_if_index_name_exists_in_elasticsearch(request):
+    ES_IP = '192.168.1.44'
+    ES_PORT = '9200'
+
+    elastic = Elasticsearch(['http://' + ES_IP + ':' + ES_PORT], verify_certs=True)
+
+    entered_index_name = request.POST.get('entered_index_name')
+
+    if elastic.indices.exists(index=entered_index_name):
+        return JsonResponse({'result': True})
+    else:
+        return JsonResponse({'result': False})
