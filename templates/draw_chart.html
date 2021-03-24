@@ -8,10 +8,10 @@
         <hr class="m-0">
     </div>
     <div class="flex-container">
-        <div style="margin: auto; width: 500px;">
+        <div>
             <div style="padding: 48px;">
                 <label><b>1. Enter the index name.</b></label>
-                <input type="text" class="form-control w-100" id="input-index-name" autofocus>
+                <input type="search" class="form-control w-100" id="input-index-name" autofocus>
             </div>
             <label style="margin-left: 48px;"><b>2. Look at the chart below.</b></label>
             <div id="chart-area">
@@ -28,11 +28,48 @@
         // 차트 없을 때
         const blank = `<i class="fad fa-chart-area fa-9x" style="color: #ecf0f1;"></i>`;
 
+        // 로딩
+        const loading = `<div class="spinner-border text-primary" role="status">
+                          <span class="sr-only">Loading...</span>
+                        </div>`
+
         $('#input-index-name').keypress((e) => {
             if (e.which === 13) {
                 const entered_index_name = $('#input-index-name').val();
-                $('#input-index-name').val('');
-                get_all_document_data_in_any_index(entered_index_name);
+
+                // 아무것도 입력하지 않으면.
+                if (entered_index_name.trim() === '') {
+                    $('#chart-area').html(blank);
+                } else {
+                    // 입력한 인덱스가 엘라스틱서치에 존재하는 인덱스인지 체크해야 됨.
+                    $.ajax({
+                            url: "{% url 'common:check_if_index_name_exists_in_elasticsearch' %}",
+                            type: 'POST',
+                            data: {entered_index_name},
+                            async: false,
+                            beforeSend: function () {
+                                $('#chart-area').html(loading);
+                            },
+                            success: function (data) {
+                                if (data.result === true) {
+                                    // 없으면
+                                    get_all_document_data_in_any_index(entered_index_name);
+                                    Toast.fire({
+                                        icon: 'success',
+                                        title: '차트 생성 완료'
+                                    });
+                                } else {
+                                    // 있으면
+                                    $('#chart-area').html(blank);
+                                    Toast.fire({
+                                        icon: 'error',
+                                        title: '존재하지 않는 인덱스 이름입니다.'
+                                    });
+                                }
+                            },
+                        }
+                    );
+                }
             }
         });
 
@@ -49,7 +86,7 @@
                     data: JSON.stringify(queryFilter),
                     contentType: "application/json;charset=UTF-8",
                     beforeSend: function () {
-                        // 데이터 불러올 때 loading 표시
+                        $('#chart-area').html(loading);
                     },
                     success: function (data) {
 
@@ -58,7 +95,7 @@
 
                         // document 들의 메타 정보 같은 것들은 제외하고 가장 필요한 _source 데이터만을 list 로 map() 으로 받아옴.
                         const doc_source_list = doc_list.map((doc) => doc['_source']);
-                        console.log(doc_source_list)
+
                         // 데이터 그리기
                         $('#chart-area').empty();
                         draw_chart(doc_source_list);
@@ -83,26 +120,196 @@
             return count
         };
 
+        let chart = null;
+        let options = null;
         const draw_chart = (doc_source_list) => {
-            const _series = doc_source_list.map((v) => v.count);
-            const _labels = doc_source_list.map((v) => v.item);
             const apexChart = "#chart-area";
-            const options = {
-                series: _series,
-                chart: {
-                    height: 350,
-                    type: 'pie'
-                },
-                title: {
-                    text: 'Stock Price Movement',
-                    align: 'center',
-                    margin: 20
-                },
-                labels: _labels
-            };
 
-            const chart = new ApexCharts(document.querySelector(apexChart), options);
-            chart.render();
+            // 이미 차트가 있으면 destroy 해줘야 됨.
+            if (chart !== null) {
+                chart.destroy();
+                chart = null;
+                options = null;
+            }
+
+            const chart_info = doc_source_list[0];
+            if (chart_info.type === 'pie') {
+
+                const sources = doc_source_list.slice(1);
+                const _labels = sources.map((v) => v.item);
+                const _series = sources.map((v) => v.count);
+
+                options = {
+                    series: _series,
+                    labels: _labels,
+                    title: {
+                        text: chart_info.title,
+                        align: 'center',
+                    },
+                    subtitle: {
+                        text: chart_info.subtitle,
+                        align: 'center',
+                    },
+                    chart: {
+                        type: chart_info.type,
+                        width: 590,
+                        height: 590,
+                    },
+                    legend: {
+                        position: 'bottom',
+                    },
+                };
+                chart = new ApexCharts(document.querySelector(apexChart), options);
+                chart.render();
+            } else if (chart_info.type === 'bar') {
+
+                const sources = doc_source_list.slice(1);
+                const _categories = sources.map((v) => v.item + '개');
+                const _data = sources.map((v) => v.count);
+
+                options = {
+                    series: [{
+                        data: _data
+                    }],
+                    title: {
+                        text: chart_info.title,
+                        align: 'center',
+                    },
+                    subtitle: {
+                        text: chart_info.subtitle,
+                        align: 'center',
+                    },
+                    chart: {
+                        type: chart_info.type,
+                        width: 590,
+                        height: 590,
+                        toolbar: {
+                            show: false,
+                        }
+                    },
+                    dataLabels: {
+                        enabled: false
+                    },
+                    plotOptions: {
+                        bar: {
+                            columnWidth: '45%',
+                            distributed: true,
+                        }
+                    },
+                    legend: {
+                        show: false
+                    },
+                    colors: ['#33b2df', '#546E7A', '#d4526e', '#13d8aa', '#A5978B', '#2b908f', '#f9a3a4', '#90ee7e',
+                        '#f48024', '#69d2e7'
+                    ],
+                    yaxis: {
+                        title: {
+                            text: chart_info.y_title,
+                        },
+                        labels: {
+                            formatter: function (y) {
+                                return y.toFixed(0) + "개";
+                            }
+                        }
+                    },
+                    xaxis: {
+                        title: {
+                            text: chart_info.x_title,
+                        },
+                        type: 'category',
+                        categories: _categories
+                    }
+                };
+                chart = new ApexCharts(document.querySelector(apexChart), options);
+                chart.render();
+            } else if (chart_info.type === 'horizontal_bar') {
+                const sources = doc_source_list.slice(1);
+                const _categories = sources.map((v) => v.item);
+                const _data = sources.map((v) => v.count);
+
+                options = {
+                    series: [{
+                        data: _data
+                    }],
+                    title: {
+                        text: chart_info.title,
+                        align: 'center',
+                    },
+                    subtitle: {
+                        text: chart_info.subtitle,
+                        align: 'center',
+                    },
+                    chart: {
+                        type: 'bar',
+                        width: 590,
+                        height: 590,
+                        toolbar: {
+                            show: false,
+                        }
+                    },
+                    plotOptions: {
+                        bar: {
+                            barHeight: '100%',
+                            distributed: true,
+                            horizontal: true,
+                            dataLabels: {
+                                position: 'bottom'
+                            },
+                        }
+                    },
+                    legend: {
+                        show: false
+                    },
+                    colors: ['#33b2df', '#546E7A', '#d4526e', '#13d8aa', '#A5978B', '#2b908f', '#f9a3a4', '#90ee7e',
+                        '#f48024', '#69d2e7'
+                    ],
+                    dataLabels: {
+                        enabled: true,
+                        textAnchor: 'start',
+                        style: {
+                            colors: ['#fff']
+                        },
+                        formatter: function (val, opt) {
+                            return opt.w.globals.labels[opt.dataPointIndex] + ":  " + val + '개'
+                        },
+                        offsetX: 0,
+                        dropShadow: {
+                            enabled: true
+                        }
+                    },
+                    stroke: {
+                        width: 1,
+                        colors: ['#fff']
+                    },
+                    yaxis: {
+                        labels: {
+                            show: false
+                        }
+                    },
+                    xaxis: {
+                        title: {
+                            text: chart_info.x_title,
+                        },
+                        type: 'category',
+                        categories: _categories
+                    }
+                };
+                chart = new ApexCharts(document.querySelector(apexChart), options);
+                chart.render();
+            }
         };
+
+        const Toast = Swal.mixin({
+            toast: true,
+            position: 'bottom-end',
+            showConfirmButton: false,
+            timer: 2500,
+            padding: 20,
+            timerProgressBar: true,
+            didOpen: (toast) => {
+                toast.addEventListener('mouseenter', Swal.stopTimer)
+                toast.addEventListener('mouseleave', Swal.resumeTimer)
+            }
+        })
     </script>
 {% endblock %}

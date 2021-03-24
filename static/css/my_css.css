@@ -53,9 +53,9 @@ html, body {
 }
 
 #chart-area {
-    margin: auto;
-    width: 404px;
-    height: 404px;
+    margin: 0px 48px 48px 48px;
+    width: 600px;
+    height: 600px;
     border: 1px solid #ced4da;
     border-radius: .25rem;
     display: -webkit-box;
