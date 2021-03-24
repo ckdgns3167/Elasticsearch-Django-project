@@ -9,5 +9,4 @@ urlpatterns = [
     url(r'^ajax/detect_list_in_json$', detect_list_in_json, name='detect_list_in_json'),
     url(r'^ajax/save_json_to_elasticsearch$', save_the_data_in_elastic, name='save_the_data_in_elastic'),
     url(r'^ajax/check_elasticsearch_for_duplicate_index_names', check_elasticsearch_for_duplicate_index_names, name='check_elasticsearch_for_duplicate_index_names'),
-    url(r'^ajax/check_if_index_name_exists_in_elasticsearch$', check_if_index_name_exists_in_elasticsearch, name='check_if_index_name_exists_in_elasticsearch'),
 ]

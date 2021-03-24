@@ -11,7 +11,12 @@
         <div>
             <div style="padding: 48px;">
                 <label><b>1. Enter the index name.</b></label>
-                <input type="search" class="form-control w-100" id="input-index-name" autofocus>
+                <div class="input-container">
+                    <input type="text" class="form-control" id="input-index-name" autofocus>
+                    <div class="icon-container visibility_hidden">
+                        <i class="loader"></i>
+                    </div>
+                </div>
             </div>
             <label style="margin-left: 48px;"><b>2. Look at the chart below.</b></label>
             <div id="chart-area">
@@ -25,13 +30,55 @@
         const ES_IP = '192.168.1.44';
         const ES_PORT = '9200';
 
+        const processed_index_name_prefix = 'processed-';
+
         // 차트 없을 때
         const blank = `<i class="fad fa-chart-area fa-9x" style="color: #ecf0f1;"></i>`;
 
-        // 로딩
+        // 차트 로딩
         const loading = `<div class="spinner-border text-primary" role="status">
                           <span class="sr-only">Loading...</span>
-                        </div>`
+                        </div>`;
+
+        let searched_index_name_list = []
+        // 입력할 때마다 엘라스틱서치로부터 인덱스들과 이름 비교를 계속 함.
+        $("#input-index-name").on("change keyup paste", function () {
+            const input_text = $('#input-index-name').val();
+            if (input_text.trim() !== '') {
+                $.ajax({
+                        url: "http://" + ES_IP + ":" + ES_PORT + "/_cat/indices/*" + input_text + '*?format=json',
+                        type: 'GET',
+                        dataType: 'json',
+                        beforeSend: function () {
+                            $('.icon-container').toggleClass('visibility_hidden');
+                        },
+                        success: function (result) {
+                            $('.icon-container').toggleClass('visibility_hidden');
+
+                            // 인덱스 이름 중에 processed- 로 시작하는 인덱스들만...
+                            result = result.filter((item) => (String(item.index).startsWith(processed_index_name_prefix)));
+                            searched_index_name_list = result.map((item) => item.index);
+                        },
+                        error: function () {
+                            $('.icon-container').toggleClass('visibility_hidden');
+                        }
+                    }
+                );
+            }
+        });
+
+        // 인덱스 이름 검색
+        $("#input-index-name").autoComplete({
+            minChars: 1,
+            source: function (term, suggest) {
+                term = term.toLowerCase();
+                const choices = searched_index_name_list;
+                const matches = [];
+                for (const i in choices)
+                    if (~choices[i].toLowerCase().indexOf(term)) matches.push(choices[i]);
+                suggest(matches);
+            }
+        });
 
         $('#input-index-name').keypress((e) => {
             if (e.which === 13) {
@@ -43,30 +90,27 @@
                 } else {
                     // 입력한 인덱스가 엘라스틱서치에 존재하는 인덱스인지 체크해야 됨.
                     $.ajax({
-                            url: "{% url 'common:check_if_index_name_exists_in_elasticsearch' %}",
-                            type: 'POST',
-                            data: {entered_index_name},
+                            url: "http://" + ES_IP + ":" + ES_PORT + "/_cat/indices/" + entered_index_name + '?format=json',
+                            type: 'GET',
+                            dataType: 'json',
                             async: false,
                             beforeSend: function () {
                                 $('#chart-area').html(loading);
                             },
-                            success: function (data) {
-                                if (data.result === true) {
-                                    // 없으면
-                                    get_all_document_data_in_any_index(entered_index_name);
-                                    Toast.fire({
-                                        icon: 'success',
-                                        title: '차트 생성 완료'
-                                    });
-                                } else {
-                                    // 있으면
-                                    $('#chart-area').html(blank);
-                                    Toast.fire({
-                                        icon: 'error',
-                                        title: '존재하지 않는 인덱스 이름입니다.'
-                                    });
-                                }
+                            success: function () { // 있으면 차트 보여주기
+                                get_all_document_data_in_any_index(entered_index_name);
+                                Toast.fire({
+                                    icon: 'success',
+                                    title: '차트 생성 완료'
+                                });
                             },
+                            error: function () { // 없으면
+                                $('#chart-area').html(blank);
+                                Toast.fire({
+                                    icon: 'error',
+                                    title: '존재하지 않는 인덱스 이름입니다.'
+                                });
+                            }
                         }
                     );
                 }
