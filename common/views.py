@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from django.http import JsonResponse
+from django.template.loader import render_to_string
 from django.views.decorators.csrf import csrf_exempt
 
 import json
@@ -9,8 +10,8 @@ from elasticsearch import Elasticsearch, helpers
 
 from common.models import IndexingHistory
 
-DEFAULT_IP = '127.0.0.1';
-DEFAULT_PORT = '9200';
+DEFAULT_IP = '192.168.1.44'
+DEFAULT_PORT = '9200'
 
 
 @csrf_exempt
@@ -115,3 +116,102 @@ def check_elasticsearch_for_duplicate_index_names(request):
                 return JsonResponse({'connection': True, 'already_exists': False})
     else:
         return JsonResponse({'connection': False})
+
+
+@csrf_exempt
+def get_pagination_html(request):
+    label = request.POST.get('label', None)
+    selected_page = request.POST.get('selected_page', None)
+    size = request.POST.get('size', None)
+    total_page_count = request.POST.get('total_page_count', None)
+    selected_data_count = request.POST.get('selected_data_count', None)
+    visible_first_page_number = request.POST.get('visible_first_page_number', None)
+    visible_last_page_number = request.POST.get('visible_last_page_number', None)
+    modal_title = request.POST.get('modal_title', None)
+    modal_subtitle = request.POST.get('modal_subtitle', None)
+
+    page_range = list(range(int(visible_first_page_number), int(visible_last_page_number) + 1))
+
+    context = {
+        'selected_label': label,
+        'selected_page': int(selected_page),
+        'selected_data_count': int(selected_data_count),
+        'selectable_page_count': int(size),
+        'total_page_count': int(total_page_count),
+        'visible_first_page_number': visible_first_page_number,
+        'visible_last_page_number': visible_last_page_number,
+        'page_range': page_range,
+        'modal_title': modal_title,
+        'modal_subtitle': modal_subtitle,
+    }
+    pagination_html = render_to_string('pagination.html', context)
+    return JsonResponse({'pagination_html': pagination_html})
+
+
+@csrf_exempt
+def get_all_id_in_any_index(request):
+    index_name = request.POST.get('index_name')
+    category_name = request.POST.get('category_name')
+    label = request.POST.get('label')
+    total_size = request.POST.get('total_size')
+
+    ids = []
+
+    query_filter = {
+        'size': 10000,
+        'sort': [{"id": "desc"}],
+        'query': {
+            "match": {
+                category_name: label
+            }
+        }
+    }
+    search_result = search(index_name, query_filter)
+    source_list = extract_source_in_document(**search_result)
+    temp_ids = extract_id_in_source(source_list)
+    ids.extend(temp_ids)
+    last_id = ids[9999]
+
+    remain = int(total_size) - 10000
+    while remain > 0:
+        query_filter = {
+            'size': 10000 if remain > 10000 else remain,
+            'search_after': [last_id],
+            'sort': [{"id": "desc"}],
+            'track_total_hits': False,
+            'query': {
+                "match": {
+                    category_name: label
+                }
+            },
+        }
+        search_result = search(index_name, query_filter)
+        source_list = extract_source_in_document(**search_result)
+        temp_ids = extract_id_in_source(source_list)
+        ids.extend(temp_ids)
+        last_id = ids[-1]
+
+        remain = remain - 10000 if remain > 10000 else 0
+
+    return JsonResponse({'ids': ids})
+
+
+def search(index_name, body):
+    elastic = Elasticsearch(['http://' + DEFAULT_IP + ':' + DEFAULT_PORT], verify_certs=True)
+    return elastic.search(index=index_name, body=body)
+
+
+def extract_source_in_document(**dic):
+    doc_list = dic['hits']['hits']
+
+    def extract(doc):
+        return doc['_source']
+
+    return list(map(extract, doc_list))
+
+
+def extract_id_in_source(source_list):
+    def extract(doc):
+        return doc['id']
+
+    return list(map(extract, source_list))

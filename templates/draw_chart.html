@@ -1,6 +1,11 @@
 {% extends "base.html" %}
 {% load static %}
 {% block content %}
+    <div id='mask' class="visibility_hidden" style="position: absolute; z-index: 1050; background-color: rgba( 0, 0, 0, 0.5 ); width: 100%; height: 100%;">
+        <div id="window-loading" class="spinner-grow text-primary position_absolute" role="status">
+            <span class="sr-only">Loading...</span>
+        </div>
+    </div>
     <div>
         <div>
             <p class="m-0 text-center"><b id="page-title">Draw <span style="color: #3498db;">charts</span> with elasticsearch <span style="color: #f1c40f;">index name</span>.</b></p>
@@ -24,23 +29,59 @@
             </div>
         </div>
     </div>
+    <!-- 상세 정보 확인 모달창 -->
+    <div class="modal" id="detailInfoModal" tabindex="-1" role="dialog" aria-labelledby="상세 정보" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered w-auto" role="document">
+            <div class="modal-content m-auto w-auto">
+                <div class="modal-header">
+                    <h5 class="modal-title font-weight-bold" id="detailInfoModalTitle"></h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+                        <span aria-hidden="true">&times;</span>
+                    </button>
+                </div>
+                <div class="modal-body h-308px">
+                    <table id="detail-table" class="table table-hover">
+                        <thead id="modal-thead"></thead>
+                        <tbody id="modal-tbody"></tbody>
+                    </table>
+                </div>
+                <div class="modal-footer d-flex justify-content-center">
+                    <div class="modal-pagination mt-0 mb-0">
+
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
     <script>
 
         // 엘라스틱서치 서버 정보
         const ES_IP = '192.168.1.44';
         const ES_PORT = '9200';
 
+        // 가공처리된 인덱스 이름 접두사
         const processed_index_name_prefix = 'processed-';
 
         // 차트 없을 때
         const blank = `<i class="fad fa-chart-area fa-9x" style="color: #ecf0f1;"></i>`;
 
-        // 차트 로딩
+        // 차트 로딩 spinner
         const loading = `<div class="spinner-border text-primary" role="status">
                           <span class="sr-only">Loading...</span>
                         </div>`;
 
+        // index live search 데이터 저장소
         let searched_index_name_list = []
+
+        // 차트에서 데이터 수가 10000개가 넘어가는 항목을 클릭했을 때, 거기에 있는 모든 데이터의 id를 저장하게 됨.
+        // after_search 를 하는 데 있어서 필요함.
+        const ids_of_the_currently_clicked = {};
+
+        $(document).ready(function () {
+            $('#window-loading').css('left', $('#mask').width() / 2 - 13);
+            $('#window-loading').css('top', $('#mask').height() / 2);
+        });
+
         // 입력할 때마다 엘라스틱서치로부터 인덱스들과 이름 비교를 계속 함.
         $("#input-index-name").on("change keyup paste", function () {
             const input_text = $('#input-index-name').val();
@@ -80,6 +121,7 @@
             }
         });
 
+        // 인덱스 이름을 정확히 입력하면 차트 그려줌.
         $('#input-index-name').keypress((e) => {
             if (e.which === 13) {
                 const entered_index_name = $('#input-index-name').val();
@@ -93,12 +135,30 @@
                             url: "http://" + ES_IP + ":" + ES_PORT + "/_cat/indices/" + entered_index_name + '?format=json',
                             type: 'GET',
                             dataType: 'json',
-                            async: false,
                             beforeSend: function () {
                                 $('#chart-area').html(loading);
                             },
                             success: function () { // 있으면 차트 보여주기
                                 get_all_document_data_in_any_index(entered_index_name);
+
+                                // [START] 그려진 차트에 대한 정보를 $('#chart-area')에 저장. => 상세 정보 불러올 때 사용됨.
+                                const dataset_name = entered_index_name.substring(
+                                    entered_index_name.indexOf("--") + 2,
+                                    entered_index_name.lastIndexOf("--")
+                                );
+                                const dataset_category_name = entered_index_name.substring(
+                                    entered_index_name.lastIndexOf("--") + 2
+                                );
+                                $('#chart-area').removeClass(function (index, className) {
+                                    return (className.match(/(^|\s)DATASET-\S+/g) || []).join(' ');
+                                });
+                                $('#chart-area').addClass('DATASET-' + dataset_name);
+                                $('#chart-area').removeClass(function (index, className) {
+                                    return (className.match(/(^|\s)CATEGORY-\S+/g) || []).join(' ');
+                                });
+                                $('#chart-area').addClass('CATEGORY-' + dataset_category_name);
+                                // [ END ] 그려진 차트에 대한 정보를 $('#chart-area')에 저장. => 상세 정보 불러올 때 사용됨.
+
                                 Toast.fire({
                                     icon: 'success',
                                     title: '차트 생성 완료'
@@ -117,12 +177,27 @@
             }
         });
 
+        // search API의 결과로 온 JSON 데이터를 받아 실제 데이터가 저장되어 있는 _source들만 추출하여 list에 담는다.
+        const extract_source_in_document = (elasticsearch_searchAPI_result_data) => {
+            // 특정 index 에 포함되어 있는 document 들의 정보를 리스트로 받아옴.
+            const doc_list = elasticsearch_searchAPI_result_data.hits.hits;
+
+            // document 들의 메타 정보 같은 것들은 제외하고 가장 필요한 _source 데이터만을 list 로 map() 으로 받아옴.
+            return doc_list.map((doc) => doc['_source']);
+        }
+
         // 특정 인덱스의 모든 정보를 확인
         const get_all_document_data_in_any_index = (index_name) => {
+
+            // [ START: Query DSL 조건 생성 ]
+            // elasticsearch search API를 통해 검색하는 방식 중 하나인 'Query DSL'를 이용하기 위해
+            // 검색하길 원하는 조건을 json 포맷으로 만들어 줘야함.
             const queryFilter = {
                 size: get_total_document_count(index_name),
                 query: {"match_all": {}},
             };
+            // [ END : Query DSL 조건 생성 ]
+
             $.ajax({
                     url: "http://" + ES_IP + ":" + ES_PORT + "/" + index_name + "/_search",
                     type: 'POST',
@@ -133,12 +208,7 @@
                         $('#chart-area').html(loading);
                     },
                     success: function (data) {
-
-                        // 특정 index 에 포함되어 있는 document 들의 정보를 리스트로 받아옴.
-                        const doc_list = data.hits.hits;
-
-                        // document 들의 메타 정보 같은 것들은 제외하고 가장 필요한 _source 데이터만을 list 로 map() 으로 받아옴.
-                        const doc_source_list = doc_list.map((doc) => doc['_source']);
+                        const doc_source_list = extract_source_in_document(data);
 
                         // 데이터 그리기
                         $('#chart-area').empty();
@@ -148,39 +218,230 @@
             );
         };
 
+        //
+        const get_all_id_in_any_index = (index_name, query, category_name, label, selected_page, size, selected_data_count, modal_title, modal_subtitle) => {
+            const total_size = get_total_document_count(index_name, query);
+            $.ajax({
+                url: '{% url 'common:get_all_id_in_any_index' %}',
+                type: "POST",
+                data: {index_name, category_name, label, total_size},
+                beforeSend: function () {
+                    $('#mask').toggleClass('visibility_hidden');
+                },
+                success: function (result) {
+                    ids_of_the_currently_clicked[index_name][label] = result.ids
+                    let queryFilter = {
+                        from: 0,
+                        size: size,
+                        sort: [{'id': 'desc'}],
+                        query: query,
+                    };
+                    make_detail_table(index_name, queryFilter, label, selected_page, size, selected_data_count, modal_title, modal_subtitle);
+                },
+            });
+        };
+
         // 특정 인덱스의 document 개수를 확인
-        const get_total_document_count = (index_name) => {
+        const get_total_document_count = (index_name, query = {"match_all": {}}) => {
             let count = null;
+            const queryFilter = {
+                query: query,
+            };
             $.ajax({
                     url: "http://" + ES_IP + ":" + ES_PORT + "/" + index_name + "/_count",
                     type: 'POST',
                     dataType: 'json',
+                    data: JSON.stringify(queryFilter),
+                    contentType: "application/json;charset=UTF-8",
                     async: false,
                     success: function (data) {
-                        count = data['count']
+                        count = data['count'];
                     },
                 }
             );
-            return count
+            return count;
         };
+
+        // 사용자가 어떤 페이지를 클릭하면 바로 직전 페이지에서의 마지막 row에 위치한 데이터의 id를 가져옴. -> after_search를 이용하기 위함.
+        const get_last_id_of_the_previous_page = (index_name, label, previous_item_count) => {
+            return ids_of_the_currently_clicked[index_name][label][previous_item_count - 1];
+        }
+
+        // 생성된 차트의 특정 데이터를 클릭하면 그 부분이 의미하는 label을 파라미터로 받아고
+        // $('#chart-area')의 클래스 중에 DATASET-*으로된 문자열에서
+        // *에 해당하는 문자열(ex. 'vqa-data')을 'not-processed-' 와 연결해서 하나의 문자열을 만든다.
+        // 그 문자열은 곧 엘라스틱서치에서 search API를 통해 검색할 인덱스 이름이다.
+        // search API는 10000개 이상의 데이터를 한 번에 가져오는 것(처음 구현 방향)이 어렵기에 from과 size 파라미터를
+        // 이용한 페이징 기법을 통해 사용자에게 일부씩 볼 수 있게 하자.
+        const get_detail_information = (label, selected_page, size, selected_data_count, modal_title, modal_subtitle) => {
+
+            const chart_area_class_list = $('#chart-area').attr('class').split(' ');
+
+            let index_name = null;
+            let category_name = null;
+
+            for (const i in chart_area_class_list) {
+                const cls = chart_area_class_list[i];
+                if (cls.includes('DATASET-')) {
+                    index_name = 'not-processed-' + cls.substr(cls.indexOf("DATASET-") + 8);
+                } else if (cls.includes('CATEGORY-')) {
+                    category_name = cls.substr(cls.indexOf("CATEGORY-") + 9);
+                }
+            }
+
+            // [ START: Query DSL 조건 생성 ]
+            // elasticsearch search API를 통해 검색하는 방식 중 하나인 'Query DSL'를 이용하기 위해
+            // 검색하길 원하는 조건을 json 포맷으로 만들어 줘야함.
+            const match = {};
+            match[category_name] = label;
+            const query = {
+                "match": match
+            };
+
+            let queryFilter;
+            if (selected_data_count > 10000) {
+                if (!(index_name in ids_of_the_currently_clicked)) {
+                    ids_of_the_currently_clicked[index_name] = {};
+                }
+                //search_after 를 사용해야 함.
+                if (selected_page !== 1) {
+                    const last_id_of_the_previous_page = get_last_id_of_the_previous_page(index_name, label, (selected_page - 1) * size);
+                    queryFilter = {
+                        search_after: [last_id_of_the_previous_page],
+                        size: size,
+                        sort: [{'id': 'desc'}],
+                        query: query,
+                    };
+                } else {
+                    if (!(label in ids_of_the_currently_clicked[index_name])) {
+                        get_all_id_in_any_index(index_name, query, category_name, label, selected_page, size, selected_data_count, modal_title, modal_subtitle);
+                        return;
+                    }
+                }
+            } else {
+                queryFilter = {
+                    from: (selected_page - 1) * size,
+                    size: size,
+                    sort: [{'id': 'desc'}],
+                    query: query,
+                };
+            }
+            // [ END : Query DSL 조건 생성  ]
+
+            // 모달 내부 테이블 생성
+            make_detail_table(index_name, queryFilter, label, selected_page, size, selected_data_count, modal_title, modal_subtitle);
+        };
+
+        const make_detail_table = (index_name, queryFilter, label, selected_page, size, selected_data_count, modal_title, modal_subtitle) => {
+            $.ajax({
+                    url: "http://" + ES_IP + ":" + ES_PORT + "/" + index_name + "/_search",
+                    type: 'POST',
+                    dataType: 'json',
+                    data: JSON.stringify(queryFilter),
+                    contentType: "application/json;charset=UTF-8",
+                    success: function (data) {
+                        const doc_source_list = extract_source_in_document(data);
+
+                        const thead = $('#modal-thead');
+                        const tbody = $('#modal-tbody');
+                        const pagination = $('.modal-pagination');
+
+                        let thead_html = '';
+                        let tbody_html = '';
+
+                        // 상세 정보 모달 테이블 내용 구축
+                        $.each(doc_source_list, function (i, row) {
+                            if (i === 0) {
+                                thead_html += "<tr>";
+                                thead_html += "<th>";
+                                thead_html += '#';
+                                thead_html += "</th>";
+                                $.each(row, function (key, value) {
+                                    if (key === 'id')
+                                        return true;
+                                    thead_html += "<th>";
+                                    thead_html += key
+                                    thead_html += "</th>";
+                                });
+                                thead_html += "</tr>";
+                                thead.html(thead_html);
+                            }
+                            tbody_html += "<tr>";
+                            tbody_html += "<td>";
+                            tbody_html += (selected_page - 1) * size + (i + 1);
+                            tbody_html += "</td>";
+                            $.each(row, function (key, value) {
+                                if (key === 'id')
+                                    return true;
+                                tbody_html += "<td>";
+                                tbody_html += value
+                                tbody_html += "</td>";
+                            });
+                            tbody_html += "</tr>";
+                            tbody.html(tbody_html);
+                        });
+
+                        // Pagination 생성
+                        let total_page_count = parseInt(selected_data_count / size);
+                        if (selected_data_count % size > 0) {
+                            total_page_count++;
+                        }
+                        const visible_page_count = 10;
+
+                        let visible_first_page_number;
+                        if (selected_page % 10 === 0) {
+                            visible_first_page_number = (parseInt(selected_page / 10) - 1) * visible_page_count + 1;
+                        } else {
+                            visible_first_page_number = parseInt(selected_page / 10) * visible_page_count + 1
+                        }
+
+                        let visible_last_page_number = visible_first_page_number + visible_page_count - 1;
+                        if (visible_last_page_number > total_page_count) {
+                            visible_last_page_number = total_page_count;
+                        }
+
+                        $.ajax({
+                            url: '{% url 'common:get_pagination_html' %}',
+                            type: "POST",
+                            data: {label, selected_page, size, total_page_count, selected_data_count, visible_first_page_number, visible_last_page_number, modal_title, modal_subtitle},
+                            success: function (result) {
+                                pagination.html(result.pagination_html);
+                                $('#detailInfoModalTitle').html(modal_title + '&nbsp<i class="fas fa-chevron-right" style="color: #d2dae2;"></i>&nbsp' + modal_subtitle + '&nbsp<i class="fas fa-chevron-right" style="color: #d2dae2;"></i>&nbsp' + "'" + label + "'")
+                                $('#detailInfoModal').modal('show');
+                            }
+                        });
+                    }
+                }
+            );
+        }
 
         let chart = null;
         let options = null;
         const draw_chart = (doc_source_list) => {
+            // 페이징 관련 변수 및 기본 값 설정
+            const initial_page = 1;
+            const size = 10; // 화면에 클릭할 수 있는 페이지 개수
+
+            // 차트가 그려질 곳
             const apexChart = "#chart-area";
 
-            // 이미 차트가 있으면 destroy 해줘야 됨.
+            // 이미 차트가 있으면 destroy 해줘야 됨. 그래야 버벅거리지 않음.
             if (chart !== null) {
                 chart.destroy();
                 chart = null;
                 options = null;
             }
 
+            // 그려질 차트에 대한 부수적인 데이터를 가지고 있음.
             const chart_info = doc_source_list[0];
-            if (chart_info.type === 'pie') {
 
+            if (chart_info.type === 'pie') {
+                $('#chart-area').removeClass(function (index, className) {
+                    return (className.match(/(^|\s)type_\S+/g) || []).join(' ');
+                });
+                $('#chart-area').addClass('type_pie');
                 const sources = doc_source_list.slice(1);
-                const _labels = sources.map((v) => v.item);
+                const _labels = sources.map((v) => v.label);
                 const _series = sources.map((v) => v.count);
 
                 options = {
@@ -198,17 +459,82 @@
                         type: chart_info.type,
                         width: 590,
                         height: 590,
+                        events: {
+                            dataPointMouseEnter: function (event) {
+                                event.path[0].style.cursor = "pointer";
+                            },
+                            click: function (event, chartContext, config) {
+                                const label = event.path[0].parentNode.getAttribute('seriesName');
+                                const selected_data_index = event.path[0].parentNode.getAttribute('data:realIndex');
+                                const selected_data_count = config.config.series[selected_data_index];
+                                const modal_title = config.config.title.text;
+                                const modal_subtitle = config.config.subtitle.text;
+                                get_detail_information(label, initial_page, size, selected_data_count, modal_title, modal_subtitle);
+                            }
+                        }
                     },
                     legend: {
                         position: 'bottom',
                     },
+                    tooltip: {}
+                };
+                chart = new ApexCharts(document.querySelector(apexChart), options);
+                chart.render();
+            } else if (chart_info.type === 'donut') {
+                $('#chart-area').removeClass(function (index, className) {
+                    return (className.match(/(^|\s)type_\S+/g) || []).join(' ');
+                });
+                $('#chart-area').addClass('type_donut');
+                const sources = doc_source_list.slice(1);
+                const _labels = sources.map((v) => v.label);
+                const _series = sources.map((v) => v.count);
+
+                options = {
+                    series: _series,
+                    labels: _labels,
+                    title: {
+                        text: chart_info.title,
+                        align: 'center',
+                    },
+                    subtitle: {
+                        text: chart_info.subtitle,
+                        align: 'center',
+                    },
+                    chart: {
+                        type: chart_info.type,
+                        width: 590,
+                        height: 590,
+                        events: {
+                            dataPointMouseEnter: function (event) {
+                                event.path[0].style.cursor = "pointer";
+                            },
+                            click: function (event, chartContext, config) {
+                                const label = event.path[0].parentNode.getAttribute('seriesName');
+                                const selected_data_index = event.path[0].parentNode.getAttribute('data:realIndex');
+                                const selected_data_count = config.config.series[selected_data_index];
+                                const modal_title = config.config.title.text;
+                                const modal_subtitle = config.config.subtitle.text;
+                                get_detail_information(label, initial_page, size, selected_data_count, modal_title, modal_subtitle);
+                            }
+                        }
+                    },
+                    fill: {
+                        type: 'gradient',
+                    },
+                    legend: {
+                        position: 'bottom',
+                    },
+                    tooltip: {}
                 };
                 chart = new ApexCharts(document.querySelector(apexChart), options);
                 chart.render();
             } else if (chart_info.type === 'bar') {
-
+                $('#chart-area').removeClass(function (index, className) {
+                    return (className.match(/(^|\s)type_\S+/g) || []).join(' ');
+                });
+                $('#chart-area').addClass('type_bar');
                 const sources = doc_source_list.slice(1);
-                const _categories = sources.map((v) => v.item + '개');
+                const _categories = sources.map((v) => v.label);
                 const _data = sources.map((v) => v.count);
 
                 options = {
@@ -228,7 +554,35 @@
                         width: 590,
                         height: 590,
                         toolbar: {
-                            show: false,
+                            show: true,
+                        },
+                        zoom: {
+                            enabled: true,
+                            type: 'x',
+                            autoScaleYaxis: true,
+                            zoomedArea: {
+                                fill: {
+                                    color: '#90CAF9',
+                                    opacity: 0.4
+                                },
+                                stroke: {
+                                    color: '#0D47A1',
+                                    opacity: 0.4,
+                                    width: 1
+                                }
+                            }
+                        },
+                        events: {
+                            dataPointMouseEnter: function (event) {
+                                event.path[0].style.cursor = "pointer";
+                            },
+                            click: function (event, chartContext, config) {
+                                const label = config.globals.categoryLabels[config.dataPointIndex];
+                                const selected_data_count = config.config.series[0].data[config.dataPointIndex];
+                                const modal_title = config.config.title.text;
+                                const modal_subtitle = config.config.subtitle.text;
+                                get_detail_information(label, initial_page, size, selected_data_count, modal_title, modal_subtitle);
+                            }
                         }
                     },
                     dataLabels: {
@@ -236,7 +590,6 @@
                     },
                     plotOptions: {
                         bar: {
-                            columnWidth: '45%',
                             distributed: true,
                         }
                     },
@@ -252,7 +605,7 @@
                         },
                         labels: {
                             formatter: function (y) {
-                                return y.toFixed(0) + "개";
+                                return y.toFixed(0);
                             }
                         }
                     },
@@ -261,16 +614,44 @@
                             text: chart_info.x_title,
                         },
                         type: 'category',
-                        categories: _categories
+                        categories: _categories,
+                        tickPlacement: 'on'
+                    },
+                    tooltip: {
+                        x: {
+                            show: true,
+                            formatter: function (value, opts) {
+                                return (
+                                    opts.w.config.xaxis.title.text + ':' + opts.w.globals.categoryLabels[opts.dataPointIndex]
+                                )
+                            },
+                        },
+                        y: {
+                            formatter: undefined,
+                            title: {
+                                formatter: function (value, opts) {
+                                    return (
+                                        opts.w.config.yaxis[0].title.text
+                                    )
+                                },
+                            },
+                        },
+                        z: {
+                            formatter: undefined,
+                            title: 'Size: '
+                        },
                     }
                 };
                 chart = new ApexCharts(document.querySelector(apexChart), options);
                 chart.render();
             } else if (chart_info.type === 'horizontal_bar') {
+                $('#chart-area').removeClass(function (index, className) {
+                    return (className.match(/(^|\s)type_\S+/g) || []).join(' ');
+                });
+                $('#chart-area').addClass('type_horizontal_bar');
                 const sources = doc_source_list.slice(1);
-                const _categories = sources.map((v) => v.item);
+                const _categories = sources.map((v) => v.label);
                 const _data = sources.map((v) => v.count);
-
                 options = {
                     series: [{
                         data: _data
@@ -289,16 +670,24 @@
                         height: 590,
                         toolbar: {
                             show: false,
+                        },
+                        events: {
+                            dataPointMouseEnter: function (event) {
+                                event.path[0].style.cursor = "pointer";
+                            },
+                            click: function (event, chartContext, config) {
+                                const label = config.globals.labels[config.dataPointIndex];
+                                const selected_data_count = config.config.series[0].data[config.dataPointIndex];
+                                const modal_title = config.config.title.text;
+                                const modal_subtitle = config.config.subtitle.text;
+                                get_detail_information(label, initial_page, size, selected_data_count, modal_title, modal_subtitle);
+                            }
                         }
                     },
                     plotOptions: {
                         bar: {
-                            barHeight: '100%',
                             distributed: true,
-                            horizontal: true,
-                            dataLabels: {
-                                position: 'bottom'
-                            },
+                            horizontal: true
                         }
                     },
                     legend: {
@@ -308,40 +697,42 @@
                         '#f48024', '#69d2e7'
                     ],
                     dataLabels: {
-                        enabled: true,
-                        textAnchor: 'start',
-                        style: {
-                            colors: ['#fff']
-                        },
-                        formatter: function (val, opt) {
-                            return opt.w.globals.labels[opt.dataPointIndex] + ":  " + val + '개'
-                        },
-                        offsetX: 0,
-                        dropShadow: {
-                            enabled: true
-                        }
+                        enabled: false,
                     },
                     stroke: {
                         width: 1,
                         colors: ['#fff']
-                    },
-                    yaxis: {
-                        labels: {
-                            show: false
-                        }
                     },
                     xaxis: {
                         title: {
                             text: chart_info.x_title,
                         },
                         type: 'category',
-                        categories: _categories
+                        categories: _categories,
+                        tickPlacement: 'on'
+                    },
+                    tooltip: {
+                        custom: function ({series, seriesIndex, dataPointIndex, w}) {
+                            return (
+                                '<div class="arrow_box">' +
+                                "<span>" +
+                                w.globals.labels[dataPointIndex] +
+                                ": " +
+                                series[seriesIndex][dataPointIndex] +
+                                "개</span>" +
+                                "</div>"
+                            );
+                        }
                     }
                 };
                 chart = new ApexCharts(document.querySelector(apexChart), options);
                 chart.render();
             }
         };
+
+        $('#detailInfoModal').on('show.bs.modal', function (event) {
+            $('#mask').addClass('visibility_hidden');
+        });
 
         const Toast = Swal.mixin({
             toast: true,
@@ -354,6 +745,6 @@
                 toast.addEventListener('mouseenter', Swal.stopTimer)
                 toast.addEventListener('mouseleave', Swal.resumeTimer)
             }
-        })
+        });
     </script>
 {% endblock %}

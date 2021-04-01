@@ -11,7 +11,7 @@
         <div id="first-step-div" class="input-group ml-4 mb-2 w-404px p-8px">
             <div class="row ml-0 mr-0 w-100">
                 <div style="width: 303px;">
-                    <input type="text" class="form-control" id="es-ip" placeholder="127.0.0.1"
+                    <input type="text" class="form-control" id="es-ip" placeholder="192.168.1.44"
                            minlength="7" maxlength="15" size="15"
                            oninput="this.value = this.value.replace(/[^0-9,.]/g, '');">
                 </div>
@@ -39,7 +39,7 @@
     </div>
 </div>
 <script>
-    const DEFAULT_IP = '127.0.0.1';
+    const DEFAULT_IP = '192.168.1.44';
     const DEFAULT_PORT = '9200';
 
     let prev_ip = null;
@@ -95,7 +95,7 @@
             let es_port = $('#es-port').val();
 
             if (es_ip === '') {
-                es_ip = '127.0.0.1';
+                es_ip = '192.168.1.44';
             } else {
                 if (!ValidateIPaddress(es_ip)) {
                     $('#first-step-div').removeClass('status-success');
@@ -199,7 +199,7 @@
 
         // 예외처리
         if (es_ip === '') {
-            es_ip = '127.0.0.1';
+            es_ip = '192.168.1.44';
         } else {
             if (!ValidateIPaddress(es_ip)) {
                 alert('IP 주소 형식을 지켜서 입력해주세요.');

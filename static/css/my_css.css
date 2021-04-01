@@ -154,3 +154,126 @@ html, body {
 .visibility_hidden {
     visibility: hidden;
 }
+
+.arrow_box {
+    position: absolute;
+    background: #555;
+    border: 2px solid #000000;
+    border-top-right-radius: 0.42rem;
+    border-bottom-right-radius: 0.42rem;
+    top: -25px;
+    margin-left: 10px;
+}
+
+.arrow_box:after, .arrow_box:before {
+    right: 100%;
+    top: 30px;
+    border: solid transparent;
+    content: " ";
+    height: 0;
+    width: 0;
+    position: absolute;
+    pointer-events: none;
+}
+
+.arrow_box:after {
+    border-color: rgba(85, 85, 85, 0);
+    border-right-color: #555;
+    border-width: 16px;
+    margin-top: -30.5px;
+}
+
+.arrow_box:before {
+    border-color: rgba(0, 0, 0, 0);
+    border-right-color: #000000;
+    border-width: 19px;
+    margin-top: -33px;
+    border-radius: 0.42rem;
+}
+
+.type_horizontal_bar .apexcharts-tooltip {
+    color: #fff;
+    transform: translateX(10px) translateY(10px);
+    overflow: visible !important;
+}
+
+.type_horizontal_bar .apexcharts-tooltip span {
+    padding: 5px 10px 5px 0px;
+    display: inline-block;
+}
+
+.modal-header {
+    border-bottom: 0 solid !important;
+    padding-bottom: 0;
+}
+
+.modal-footer {
+    border-top: 0 solid !important;
+    padding: 0 16px 16px 16px;
+}
+
+table thead tr td {
+    font-weight: bold;
+}
+
+#modal-thead {
+    background: #c7ecee;
+}
+
+#detail-table tbody tr:hover {
+    background-color: #f7f1e3 !important;
+}
+
+#detail-table {
+    border-left: 1px solid #dee2e6;
+    border-right: 1px solid #dee2e6;
+    border-bottom: 1px solid #dee2e6;
+}
+
+#detail-table th, #detail-table td {
+    border: 1px solid #dee2e6;
+    padding-top: 0px;
+    padding-bottom: 0px;
+    text-align: center;
+    vertical-align: middle;
+    height: 25px !important;
+    white-space: nowrap;
+}
+
+.modal-dialog {
+    max-width: None !important;
+}
+
+.font-weight-bold {
+    font-weight: bold;
+}
+
+#detail-table th {
+    width: 1% !important;
+    white-space: nowrap;
+}
+
+.h-308px {
+    height: 308px;
+}
+
+.modal-body table {
+    margin-bottom: 0;
+}
+
+.modal-footer .pagination {
+    margin-bottom: 0;
+}
+
+button.close {
+    width: 56px;
+    height: 56px;
+}
+
+button.close:focus {
+    outline: 0;
+}
+
+.position_absolute {
+    position: absolute;
+}
